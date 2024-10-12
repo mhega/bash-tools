@@ -8,7 +8,7 @@ USAGE()
   echo
   echo "Manage backup/restore of current directory."
   echo  
-  echo "Usage: bkp [-l | -c | -v | -r | -m | --FORCE]"
+  echo "Usage: bkp [-l | -c | -v | -r | -m | --FORCE | -R]"
   echo
   OPTIONS
   echo "Backup Target Directory: "
@@ -25,11 +25,15 @@ OPTIONS()
   echo "r               Restore contents of select backup into a subdirectory within the current directory."
   echo "m               Move old backup files (5 day-old or older) to a sub-directory (old_files)."
   echo "--FORCE         Force backing up of the current directory irrespective of the disk usage."
+  echo "R               Recursively archive all subdirectories."
   echo
   echo "                Run bkp command with only one option at a time."
   echo "                Running bkp command without any option will take a new backup."
   echo
 }
+BACKUPOPT=$((2#00))
+FORCEOPT=$((2#01))
+RECURSIVEOPT=$((2#10))
 
 while [ True ]; do
   if [[ -z "$1" ]]; then
@@ -49,8 +53,22 @@ while [ True ]; do
   elif [[ -z "$COMMANDOPT" && "$1" = "-m" ]]; then
         COMMANDOPT="move"
         shift 1
-  elif [[ -z "$COMMANDOPT" && "$1" = "--FORCE" ]]; then
-        COMMANDOPT="force"
+  elif [[ ( -z "$COMMANDOPT" || "$COMMANDOPT" = "backup" ) && ( "$1" = "--FORCE" || "$1" = "-R" ) ]]; then
+        COMMANDOPT="backup"
+        if [[ $1 = "--FORCE" ]]; then
+              if [[ $(($BACKUPOPT & $FORCEOPT)) != 0 ]]; then
+                  USAGE
+                  exit 1
+              fi
+              BACKUPOPT=$(($BACKUPOPT | $FORCEOPT))
+        fi
+        if [[ $1 = "-R" ]]; then
+              if [[ $(($BACKUPOPT & $RECURSIVEOPT)) != 0 ]]; then
+                   USAGE
+                   exit 1
+              fi
+              BACKUPOPT=$(($BACKUPOPT | $RECURSIVEOPT))
+        fi
         shift 1
   else
     USAGE
@@ -59,9 +77,9 @@ done
 
 
 suffix=$(date +"%Y-%m-%d_%H.%M.%S")
-BKP_TARGET_PATH=$(echo $BACKUPPATH"$PWD"/"$(basename $PWD)"_$suffix | sed "s/\(\/\s*\"*\s*\)\./\1/g")
+BKP_TARGET_PATH=$(echo $BACKUPPATH"${PWD// /_}"/"$(basename ${PWD// /_})"_$suffix | sed "s/\(\/\s*\"*\s*\)\./\1/g")
 echo "$BKP_TARGET_PATH" | grep -qE "\s" && echo "Directories Containing Space Characters Are Not Supported.." && exit 1
-BKP_DIR_NAME=$(basename $PWD | sed "s/^\(\.\)*\(.*\)$/\2/g")
+BKP_DIR_NAME=$(basename ${PWD// /_} | sed "s/^\(\.\)*\(.*\)$/\2/g")
 
 DISPLAY()
 {
@@ -141,7 +159,7 @@ if [ "$COMMANDOPT"  = "compare" ]; then
      if ls $filename > /dev/null 2>&1; then
        echo
        echo "$(basename $filename) will be compared with the current path.."
-       echo "Sub-directories will not undergo recursive comparison."
+       echo "Unless Backup is Recursive, Sub-directories may not undergo deep comparison."
        echo
 
 
@@ -193,7 +211,7 @@ elif [ "$COMMANDOPT"  = "verbose" ]; then
      if ls $filename > /dev/null 2>&1; then
        echo
        echo "$(basename $filename) will be compared with the current path in verbose mode.."
-       echo "Sub-directories will not undergo recursive comparison."
+       echo "Unless Backup is Recursive, Sub-directories may not undergo deep comparison."
        echo
 
 
@@ -335,7 +353,7 @@ echo "** TOTAL SIZE: "$BKP_CURRENT_SIZE" BYTES **"
 echo
 
 if [[ $BKP_CURRENT_SIZE -gt 2000 ]]; then
-    if [ "$COMMANDOPT" = "force" ]; then
+    if [ $(($BACKUPOPT & $FORCEOPT)) = $FORCEOPT ]; then
         echo "** FORCE OPTION IS SPECIFIED TO OVERRIDE SIZE LIMIT RESTRICTION **"
         echo
         while [ True ]; do
@@ -363,6 +381,9 @@ mkdir -p "$BACKUPPATH"
 mkdir -p "$(dirname "$BKP_TARGET_PATH")"
 
 read -p "Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): " descr
+if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
+   descr="$descr"'\t'[RECURSIVE]
+fi
 if [ -n "$descr" ]; then
  dirwc=$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')
  bkpid=$(date -jf '%Y-%m-%d_%H.%M.%S' $(basename "$BKP_TARGET_PATH" | sed "s/^.\{$dirwc\}_\(.*\)$/\\1/g") +%s)
@@ -371,7 +392,10 @@ if [ -n "$descr" ]; then
  echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$BKP_TARGET_PATH")/meta.dat
 fi
 set -x
-zip  "$BKP_TARGET_PATH".zip ./*  | tee "$BKP_TARGET_PATH".log
+if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
+   zip -r "$BKP_TARGET_PATH".zip ./*  | tee "$BKP_TARGET_PATH".log
+else
+   zip "$BKP_TARGET_PATH".zip ./*  | tee "$BKP_TARGET_PATH".log
+fi
 { set +x; } 2>/dev/null; echo "Command output directed to:"
 echo "$BKP_TARGET_PATH".log
-
