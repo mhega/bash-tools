@@ -1,0 +1,15 @@
+#!/bin/bash
+ADR=<<IPADDR>>
+PRT=<<PORT>>
+USR=<<USER>>
+
+
+if [ -z "$1" ]; then
+  set -x; ssh -p "$PRT" "$USR"@"$ADR"
+  { set +x; } 2>/dev/null
+elif [[ "$1" = "-f" ]]; then
+  set -x
+  sftp -oPort="$PRT" "$USR"@"$ADR"
+else
+ echo "Invald Option.." && false
+fi
