@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BACKUPPATH="/home/pi/bkp.d"
+BACKUPPATH="/home/mhega/bkp.d"
 
 
 USAGE()
@@ -170,10 +170,10 @@ if [ "$COMMANDOPT"  = "compare" ]; then
                     print "$File Name$Timestamp (Current)$Timestamp (Archive)$"
                     print "$---------$-------------------$-------------------$"}
                     {cmd="ls -ld --full-time "qq $3 qq" 2>/dev/null | awk '\''{print $6"qq" "qq"$7}'\'' | cut -d : -f1-2"
-                     if ((cmd|getline x) > 0) {print $3"$"x"$"$1" "$2} else {print $3"$ $"$1" "$2}
-                    }' | awk -F"$" '{if($2 != $3 && NR > 3){$0=$0"$*"}; print}';
+                     if ((cmd|getline x) > 0) {print "$"$3"$"x"$"$1" "$2} else {print "$"$3"$ $"$1" "$2}
+                    }' | awk -F"$" '{if($3 != $4 && NR > 2){$0=$0"$*"}; print}';
        ls | grep -vxf <(unzip -l "$filename" | sed 1,3d | awk '(NF>3){$1="";$2="";$3="";print $0}' | sed -e 's/^[[:space:]]*//' | sed 's/^\(.*\)\/$/\1/g') \
-       | awk -v qq=\" '{cmd1="ls -ld --full-time "qq $0 qq" | awk '\'' {print $6"qq" "qq"$7} '\'' | cut -d : -f1-2"; if((cmd1|getline x) > 0){print $0"$"x"$ $*"}}' \
+       | awk -v qq=\" '{cmd1="ls -ld --full-time "qq $0 qq" | awk '\'' {print $6"qq" "qq"$7} '\'' | cut -d : -f1-2"; if((cmd1|getline x) > 0){print "$"$0"$"x"$ $*"}}' \
        ) | column -t -s$'$'
 
 
