@@ -131,8 +131,8 @@ DISPLAYSITE()
         {
 		cmd='ls $base/sites/$site 2> /dev/null | tr \\t \\n'
                 OLDIFS=$IFS;IFS=$'\n';files=($(eval $cmd))
-                echo '$'Case ID'$'Date Last Visited'$'Description'$'
-                echo '$'-------'$'-----------------'$'-----------'$'
+                echo '$'Case ID'$'Date Linked'$'Description'$'
+                echo '$'-------'$'-----------'$'-----------'$'
                 for line in ${files[@]}; do
                         #site=$(files=($base/sites/*/$line); [ -d "${files[0]}" ] && (ls -d $base/sites/*/$line | grep -Eo /sites/.*/ | cut -d / -f 3 | paste -s -d, /dev/stdin) || echo " ")
                         timestamp=$(ls -ld --full-time "$base/sites/$site/$line" | awk '{print $6" "$7}' | cut -d . -f1)
@@ -165,8 +165,8 @@ DISPLAYALLSITECASES()
         {
                 cmd='ls -d $base/sites/*/* 2> /dev/null | tr \\t \\n'
                 OLDIFS=$IFS;IFS=$'\n';files=($(eval $cmd))
-                echo '$'Site'$'Case ID'$'Date Created'$'Description'$'
-                echo '$'----'$'-------'$'------------'$'-----------'$'
+                echo '$'Site'$'Case ID'$'Date Linked'$'Description'$'
+                echo '$'----'$'-------'$'-----------'$'-----------'$'
                 for line in ${files[@]}; do
 			site=$(echo "$line" | rev | cut -d "/" -f 2 | rev)
 			case=$(basename "$line")
