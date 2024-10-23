@@ -132,3 +132,170 @@ Unless Backup is Recursive, Sub-directories may not undergo deep comparison.
 
 mhega@ubuntu2404:~/tmp$
 ```
+
+## csdir
+If you work on independent projects that require organizing your files into folders that are grouped by parent links, "csdir" can help quickly manage and access your folders.
+
+While the naming of the options used in this script is suited to ticket creation model, the example below shows a more popular scenario - organzing files into folders representing study courses
+
+```console
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ head -3 .sh/csdir.gnu.sh 
+#! /bin/bash
+dir="ALL"
+base=/home/mhega/etc/Courses
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ sudo ln -s ~/.sh/csdir.gnu.sh /usr/local/bin/csdir
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ csdir 
+
+List Of Recent 10 Cases
+-----------------------
+
+  Case ID  Site ID  Date Last Visited  Description  
+  -------  -------  -----------------  -----------  
+
+mhega@ubuntu2404:~$ csdir calculas -s Math
+Creating /home/mhega/etc/Courses/ALL/CALCULAS
+/home/mhega/etc/Courses/sites/MATH/ linked to case
+Changing to /home/mhega/etc/Courses/ALL/CALCULAS in a subshell.
+
+Hit [Ctrl]+[D] or type exit to exit this child shell.
+
+A function named "home" with the following definition will be sourced so it can be used to quickly change to the current directory (CALCULAS).
+To get back here, just type home.
+
+A function named "descr" with the following definition will be sourced so it can be used to specify description of the curent case.
+
+   home()
+   {
+	  echo "Going to $(basename $SCRWKDIR).."
+	  cd $SCRWKDIR
+   }
+   descr()
+   {
+     	if [[ -z $SCRWKDIR ]]; then echo No case directory detected; return; fi
+     	read -p "Input a single-line case description and/or hit NewLine to skip: " descr
+     	if [ -n "$descr" ]; then
+       		caseid=$(md5sum <(basename $SCRWKDIR) | cut -c 1-32)
+       		descrvarname=DESCR_$caseid
+       		declare $descrvarname="$descr"
+       		echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$SCRWKDIR")/../case_meta.dat
+     	fi
+   }
+
+(calculas) mhega@ubuntu2404:~/etc/Courses/ALL/CALCULAS$ 
+(calculas) mhega@ubuntu2404:~/etc/Courses/ALL/CALCULAS$ 
+(calculas) mhega@ubuntu2404:~/etc/Courses/ALL/CALCULAS$ descr
+Input a single-line case description and/or hit NewLine to skip: Differentials and Integrals
+(calculas) mhega@ubuntu2404:~/etc/Courses/ALL/CALCULAS$ 
+(calculas) mhega@ubuntu2404:~/etc/Courses/ALL/CALCULAS$ 
+(calculas) mhega@ubuntu2404:~/etc/Courses/ALL/CALCULAS$ csdir .
+
+  Case ID   Site ID  Date Last Visited    Description                  
+  -------   -------  -----------------    -----------                  
+  CALCULAS  MATH     2024-10-23 00:33:56  Differentials and Integrals  
+
+(calculas) mhega@ubuntu2404:~/etc/Courses/ALL/CALCULAS$ exit
+exit
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ csdir -s math
+
+List Of All Cases For Site MATH
+-------------------------------
+
+  Case ID   Date Linked          Description                  
+  -------   -----------          -----------                  
+  CALCULAS  2024-10-23 00:33:56  Differentials and Integrals  
+
+mhega@ubuntu2404:~$
+mhega@ubuntu2404:~$ csdir algebra -s Math
+Creating /home/mhega/etc/Courses/ALL/ALGEBRA
+/home/mhega/etc/Courses/sites/MATH/ linked to case
+Changing to /home/mhega/etc/Courses/ALL/ALGEBRA in a subshell.
+
+Hit [Ctrl]+[D] or type exit to exit this child shell.
+
+A function named "home" with the following definition will be sourced so it can be used to quickly change to the current directory (ALGEBRA).
+To get back here, just type home.
+
+A function named "descr" with the following definition will be sourced so it can be used to specify description of the curent case.
+
+   home()
+   {
+	  echo "Going to $(basename $SCRWKDIR).."
+	  cd $SCRWKDIR
+   }
+   descr()
+   {
+     	if [[ -z $SCRWKDIR ]]; then echo No case directory detected; return; fi
+     	read -p "Input a single-line case description and/or hit NewLine to skip: " descr
+     	if [ -n "$descr" ]; then
+       		caseid=$(md5sum <(basename $SCRWKDIR) | cut -c 1-32)
+       		descrvarname=DESCR_$caseid
+       		declare $descrvarname="$descr"
+       		echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$SCRWKDIR")/../case_meta.dat
+     	fi
+   }
+
+(algebra) mhega@ubuntu2404:~/etc/Courses/ALL/ALGEBRA$ 
+(algebra) mhega@ubuntu2404:~/etc/Courses/ALL/ALGEBRA$ 
+(algebra) mhega@ubuntu2404:~/etc/Courses/ALL/ALGEBRA$ 
+(algebra) mhega@ubuntu2404:~/etc/Courses/ALL/ALGEBRA$ exit
+exit
+mhega@ubuntu2404:~$
+mhega@ubuntu2404:~$ csdir -s math -i
+Input a single-line site description and/or hit NewLine to skip: Mathematics for 9th Grade
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ 
+mhega@ubuntu2404:~$ csdir -s math
+
+Site Description: Mathematics for 9th Grade
+
+List Of All Cases For Site MATH
+-------------------------------
+
+  Case ID   Date Linked          Description                  
+  -------   -----------          -----------                  
+  ALGEBRA   2024-10-23 00:38:43                               
+  CALCULAS  2024-10-23 00:33:56  Differentials and Integrals  
+
+mhega@ubuntu2404:~$
+mhega@ubuntu2404:~$ csdir algebra
+Changing to /home/mhega/etc/Courses/ALL/ALGEBRA in a subshell.
+
+Hit [Ctrl]+[D] or type exit to exit this child shell.
+
+A function named "home" with the following definition will be sourced so it can be used to quickly change to the current directory (ALGEBRA).
+To get back here, just type home.
+
+A function named "descr" with the following definition will be sourced so it can be used to specify description of the curent case.
+
+   home()
+   {
+	  echo "Going to $(basename $SCRWKDIR).."
+	  cd $SCRWKDIR
+   }
+   descr()
+   {
+     	if [[ -z $SCRWKDIR ]]; then echo No case directory detected; return; fi
+     	read -p "Input a single-line case description and/or hit NewLine to skip: " descr
+     	if [ -n "$descr" ]; then
+       		caseid=$(md5sum <(basename $SCRWKDIR) | cut -c 1-32)
+       		descrvarname=DESCR_$caseid
+       		declare $descrvarname="$descr"
+       		echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$SCRWKDIR")/../case_meta.dat
+     	fi
+   }
+
+(algebra) mhega@ubuntu2404:~/etc/Courses/ALL/ALGEBRA$ 
+(algebra) mhega@ubuntu2404:~/etc/Courses/ALL/ALGEBRA$ 
+(algebra) mhega@ubuntu2404:~/etc/Courses/ALL/ALGEBRA$
+```
+
