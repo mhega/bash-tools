@@ -4,7 +4,7 @@ base=/Users/mhega/csdir.d/Cases
 Usage()
 {
  echo
- echo "Usage: csdir [-s [Site [-i]]] [-c] [Case] [-h]"
+ echo "Usage: csdir [-s [Site [-i]]] [-c] [Case] [-h] [-r Case]"
  echo
 }
 Options()
@@ -28,6 +28,7 @@ Options()
  echo "csdir -s -c                     List all registered sites and linked cases"
  echo "csdir 123456                    Go to or create case 123456"
  echo "csdir -c 123456                 Go to or create case 123456"
+ echo "csdir -r 123456                 Remove empty directory associated with case 123456"    
  echo "csdir -s testsite               List all cases that are linked to testsite"    
  echo "csdir -s testsite -i            Input site description for testsite"
  echo "csdir -s testsite 123456        Go to or create case 123456, and link with testsite if not linked (Create testsite if it does not exist)"
@@ -277,6 +278,19 @@ while [ True ]; do
   elif [ $1 = "-h" ]; then
     Help
     exit 0
+  elif [ $1 = "-r" ]; then
+    shift 1
+    if [[ -z $1 || -n $2 ]]; then
+      error="t"
+      break
+    else
+      rfile=$(echo $1 | tr '[:lower:]' '[:upper:]')
+      echo Removing "$rfile"
+      set -x
+      rm -d "$base/$dir/$rfile"
+      { set +x; }
+      exit $?
+    fi
   elif [ $1 = "-c" -o $1 = "--case" ]; then
     if [[ -n $case || $allcases = "t" ]]; then
       error="t"
