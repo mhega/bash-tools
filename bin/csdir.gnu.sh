@@ -194,13 +194,14 @@ DISPLAYALLCASES()
 	{
 		cmd='ls -t $base/$dir 2> /dev/null | tr \\t \\n | ([[ -n $sitename ]] && grep -w $sitename || grep "$")  | ([[ -n $numrecords ]] && head -$numrecords || grep "$")'
 		OLDIFS=$IFS;IFS=$'\n';files=($(eval $cmd))
-		echo '$'Case ID'$'Site ID'$'Date Last Visited'$'Description'$'
-		echo '$'-------'$'-------'$'-----------------'$'-----------'$'
+		echo '$'Case ID'$'Site ID'$'File Count'$'Date Last Visited'$'Description'$'
+		echo '$'-------'$'-------'$'----------'$'-----------------'$'-----------'$'
 		for line in ${files[@]}; do
 			site=$(files=($base/sites/*/$line); [ -d "${files[0]}" ] && (ls -d $base/sites/*/$line | grep -Eo /sites/.*/ | cut -d / -f 3 | paste -s -d, /dev/stdin) || echo " ")
+			countoffiles=$(ls -ld "$base/$dir/$line"/* 2>/dev/null | wc -l | sed 's/ //g')
 			timestamp=$(ls -ld --full-time "$base/$dir/$line" | awk '{print $6" "$7}' | cut -d . -f1)
 			descr=$([ -f $metafile ] && id=DESCR_$(echo $line | md5sum | cut -c 1-32) && declare $id="$(grep $id $metafile | tail -1 | sed 's/^\([^:]*\):\(.*\)$/\2/g')" && echo ${!id})
-			echo '$'$line'$'$site'$'$timestamp'$'$descr'$'
+			echo '$'$line'$'$site'$'$countoffiles'$'$timestamp'$'$descr'$'
 		done
 	}
 
@@ -267,10 +268,16 @@ while [ True ]; do
 			break
 		else
 			rfile=$(echo $1 | tr '[:lower:]' '[:upper:]')
+			fullpath=$base/$(echo $dir | tr '[:lower:]' '[:upper:]')/$rfile
 			echo Removing "$rfile"
 			set -x
-			rm -d "$base/$dir/$rfile"
+			rm -d "$fullpath" || exit $?
 			{ set +x; }
+			for line in $(ls -F $base/sites/*/$rfile 2>/dev/null || true | grep -E "@$"); do
+				sitefilepath=$(sed 's/@$//g' <(echo $line))
+				#echo $sitefilepath
+				ls -l $sitefilepath | grep -q "$fullpath" && set -x; unlink "$sitefilepath"; { set +x; }
+			done
 			exit $?
 		fi
 	elif [ $1 = "-c" -o $1 = "--case" ]; then

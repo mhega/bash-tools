@@ -242,17 +242,21 @@ DISPLAYALLCASES()
 
  metafile=$base/case_meta.dat
 ls -t $base/$dir 2> /dev/null | tr \\t \\n | ([[ -n $sitename ]] && grep -w $sitename || grep '$')  | ([[ -n $numrecords ]] && head -$numrecords || grep '$') |  awk         -v metafile=$metafile         -v base=$base         -v dir=$dir         -v site=$site         -v q=\' -v qq=\"         'BEGIN{ORS=""
-              print "\tCase ID\tSite\tDate Last Visited\tDescription\n"
-              print "\t-------\t----\t-----------------\t-----------\n"}
+              print "\tCase ID\tSite\tFile Count\tDate Last Visited\tDescription\n"
+              print "\t-------\t----\t----------\t-----------------\t-----------\n"}
          {
          cmds="files=("base"/sites/*/"$1"); [ -d "qq"${files[0]}"qq" ] && (ls -d "base"/sites/*/"$1" | grep -Eo /sites/.*/ | cut -d "q"/"q" -f 3 | paste -s -d, /dev/stdin) || echo "qq" "qq
          cmddate="stat -l -t '%FT%T' " base "/" dir "/" $1 " | awk '\'' {print $6}'\'' | cut -d '\''T'\'' -f 1";
          #cmd2="basename "$1
          cmddescr="[ -f "metafile" ] && id=DESCR_$(echo "$1" | md5 | rev | cut -c 1-32 | rev) && declare $id="qq"$(grep $id "metafile" | tail -1 | sed '\''s/^\\([^:]*\\):\\(.*\\)$/\\2/g'\'')"qq" && echo ${!id}"
+         #cmdcount="ls -ld " base "/" dir "/"$1"/* 2>/dev/null | wc -l | sed "q"s/ //g"q
+         cmdcount="ls -ld "qq base "/" dir "/"$1qq"/* 2>/dev/null | wc -l | sed "q"s/ //g"q
          print "\t"
          print $1
          print "\t"
          if( (cmds|getline x) > 0) { print x; close(cmds) }
+         print "\t"
+         if( (cmdcount|getline x) > 0) { print x; close(cmdcount) }
          print "\t"
          if( (cmddate|getline x) > 0) { print x; close(cmddate) } else exit 1
          print "\t"
@@ -285,10 +289,16 @@ while [ True ]; do
       break
     else
       rfile=$(echo $1 | tr '[:lower:]' '[:upper:]')
+      fullpath=$base/$(echo $dir | tr '[:lower:]' '[:upper:]')/$rfile
       echo Removing "$rfile"
       set -x
-      rm -d "$base/$dir/$rfile"
+      rm -d "$fullpath" || exit $?
       { set +x; }
+      for line in $(ls -F $base/sites/*/$rfile 2>/dev/null || true | grep -E "@$"); do
+        sitefilepath=$(sed 's/@$//g' <(echo $line))
+        #echo $sitefilepath
+        ls -l $sitefilepath | grep -q "$fullpath" && set -x; unlink "$sitefilepath"; { set +x; }
+      done
       exit $?
     fi
   elif [ $1 = "-c" -o $1 = "--case" ]; then
