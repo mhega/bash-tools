@@ -8,7 +8,7 @@ USAGE()
   echo
   echo "Manage backup/restore of current directory."
   echo  
-  echo "Usage: bkp [-l | -c | -r | -m] [--FORCE] [-R]"
+  echo "Usage: bkp [-l | -c | -r | -m] [--FORCE] [-R] [-i]"
   echo
   OPTIONS
   echo "Backup Target Directory: "
@@ -25,14 +25,16 @@ OPTIONS()
   echo "m               Move old backup files (5 day-old or older) to a sub-directory (old_files)."
   echo "--FORCE         Force backing up of the current directory irrespective of the disk usage."
   echo "R               Recursively archive all subdirectories."
+  echo "i               Incremental (differential) archive." 
   echo
   echo "                Run bkp command with only one of "-l", "-c", "-r", "-m" options at a time."
   echo "                Running bkp command without any option, or with options "-R" and/or "--FORCE" will take a new backup."
   echo
 }
-BACKUPOPT=$((2#00))
-FORCEOPT=$((2#01))
-RECURSIVEOPT=$((2#10))
+BACKUPOPT=$((2#000))
+FORCEOPT=$((2#001))
+RECURSIVEOPT=$((2#010))
+INCREMENTALOPT=$((2#100))
 
 while [ True ]; do
   if [[ -z "$1" ]]; then
@@ -49,7 +51,7 @@ while [ True ]; do
   elif [[ -z "$COMMANDOPT" && "$1" = "-m" ]]; then
         COMMANDOPT="move"
         shift 1
-  elif [[ ( -z "$COMMANDOPT" || "$COMMANDOPT" = "backup" ) && ( "$1" = "--FORCE" || "$1" = "-R" ) ]]; then
+  elif [[ ( -z "$COMMANDOPT" || "$COMMANDOPT" = "backup" ) && ( "$1" = "--FORCE" || "$1" = "-R" || "$1" = "-i" ) ]]; then
         COMMANDOPT="backup"
         if [[ $1 = "--FORCE" ]]; then
               if [[ $(($BACKUPOPT & $FORCEOPT)) != 0 ]]; then
@@ -65,7 +67,14 @@ while [ True ]; do
               fi
               BACKUPOPT=$(($BACKUPOPT | $RECURSIVEOPT))
         fi
-        shift 1
+        if [[ $1 = "-i" ]]; then
+              if [[ $(($BACKUPOPT & $INCREMENTALOPT)) != 0 ]]; then
+                   USAGE
+                   exit 1
+              fi
+              BACKUPOPT=$(($BACKUPOPT | $INCREMENTALOPT))
+        fi
+	shift 1
   else
     USAGE
   fi
@@ -330,7 +339,10 @@ mkdir -p "$(dirname "$BKP_TARGET_PATH")"
 
 read -p "Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): " descr
 if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
-   descr="$descr"'\t'[RECURSIVE]
+   descr="$descr"'    '[RECURSIVE]
+fi
+if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
+   descr="$descr"'    '[INCREMENTAL]
 fi
 if [ -n "$descr" ]; then
  dirwc=$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')
@@ -339,11 +351,38 @@ if [ -n "$descr" ]; then
  declare $descrvarname="$descr"
  echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$BKP_TARGET_PATH")/meta.dat
 fi
-set -x
+
+CHECKSUMSTORE()
+{
+  if [[ $1 = "-p" ]]; then
+    archivedfiles=$(unzip -l "$BKP_TARGET_PATH".zip | sed 1,3d | awk '{print $4}' | grep -Ev "^\s*$")
+    for lin in $archivedfiles ; do echo "cksum $(cksum $lin)"; done >> "$BKP_TARGET_PATH".log 2>/dev/null
+    zip -gj "$BKP_TARGET_PATH".zip "$BKP_TARGET_PATH".log
+  elif [[ $1 = "-g" ]]; then
+    for lin in "$(dirname $BKP_TARGET_PATH)"/*zip; do unzip -p $lin $(basename $lin | sed 's/zip$/log/g'); done | grep -h cksum | sed 's/cksum //g' | grep -Ev "$\s*^"
+  fi
+}
+
+zipopt=""
 if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
-   zip -r "$BKP_TARGET_PATH".zip ./*  | tee "$BKP_TARGET_PATH".log
+   if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
+      files=$(find . -exec cksum {} + 2>/dev/null | sed 's/ [.]\// /g' | grep -vxf <(CHECKSUMSTORE -g) | awk 'ORS=" " {print $3}')
+      [[ -n "${files// /}" ]] || { echo "No Files To Archive"; exit 0; }
+   else
+      files=*
+   fi
+   zipopt="-r"
 else
-   zip "$BKP_TARGET_PATH".zip ./*  | tee "$BKP_TARGET_PATH".log
+   if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
+      files=$(cksum * 2>/dev/null | grep -vxf <(CHECKSUMSTORE -g) | awk 'ORS=" " {print $3}')
+      [[ -n "${files// /}" ]] || { echo "No Files To Archive"; exit 0; }
+   else
+      files=./*
+   fi
 fi
-{ set +x; } 2>/dev/null; echo "Command output directed to:"
+set -x
+zip $zipopt "$BKP_TARGET_PATH".zip $files  | tee "$BKP_TARGET_PATH".log
+{ set +x; } 2>/dev/null;
+CHECKSUMSTORE -p
+echo "Command output directed to:"
 echo "$BKP_TARGET_PATH".log
