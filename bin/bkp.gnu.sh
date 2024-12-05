@@ -80,6 +80,7 @@ while [ True ]; do
   fi
 done
 
+(cd "$BACKUPPATH") || exit 1
 
 suffix=$(date +"%Y-%m-%d_%H.%M.%S")
 BKP_TARGET_PATH=$(echo $BACKUPPATH"${PWD// /_}"/"$(basename ${PWD// /_})"_$suffix | sed "s/\(\/\s*\"*\s*\)\./\1/g")
@@ -98,12 +99,13 @@ DISPLAY()
         -v metafile=$metafile \
         -v q=\' -v qq=\" \
         'BEGIN{ORS=""
-              print "$Backup ID$Timestamp$Checksum$Description\n"
-              print "$---------$---------$--------$-----------\n"}
+              print "$Backup ID$Timestamp$Checksum$Flags$Description\n"
+              print "$---------$---------$--------$-----$-----------\n"}
          {cmd0="date -d "qq"$(basename '\''"$1"'\'' | sed '\''s/^.\\{"dirwc"\\}_\\(.*\\)\\.zip$/\\1/g;s/_/ /g;s/\\./:/g'\'')"qq" +"qq"%s"qq
          cmd1="ls -l --full-time '\''"$1"'\'' | awk '\'' {print $6"qq" "qq"$7}'\'' | cut -d . -f1";
          cmd2="cksum '\''"$1"'\'' | awk '\''{print $1}'\''"
-         cmd3="[ -f "metafile" ] && id=DESCR_$("cmd0") && grep $id "metafile" | sed '\''s/^\\([^:]*\\):\\(.*\\)$/\\2/g'\''" 
+         cmd3="[ -f "metafile" ] && id=DESCR_$("cmd0") && grep $id "metafile" | sed '\''s/^\\([^:]*\\):\\([^:]*\\):\\(.*\\)$/\\2/g'\''" 
+         cmd4="[ -f "metafile" ] && id=DESCR_$("cmd0") && grep $id "metafile" | sed '\''s/^\\([^:]*\\):\\([^:]*\\):\\(.*\\)$/\\3/g'\''" 
          print "$"
          if( (cmd0|getline x) > 0) { print x; close(cmd0) } else exit 1
          print "$"
@@ -112,6 +114,8 @@ DISPLAY()
          if( (cmd2|getline x) > 0) { print x; close(cmd2) } else exit 1
          print "$"
          if( (cmd3|getline x) > 0) { print x; close(cmd3) }
+         print "$"
+         if( (cmd4|getline x) > 0) { print x; close(cmd4) }         
          print "\n"}
          END{if (NR==0) {exit 1}}' \
 | column -t  -s$'$'
@@ -171,15 +175,15 @@ if [ "$COMMANDOPT"  = "compare" ]; then
 
        (unzip -l "$filename" | sed 's/^\(.*\)\/$/\1/g' \
        | sed 1,3d \
-       | awk '(NF > 3){$1="";$3=$3"\t";print}' \
+       | awk '(NF > 3){$1="";$3=$3"$";$4="$"$4;print}' \
        | sed -e 's/^[[:space:]]*//' \
        | sed 's/\(\t\)[ ]*/\1/g' \
-       | awk -v q=\' -v qq=\" \
+       | awk -F$ -v q=\' -v qq=\" \
                    'BEGIN{
                     print "$File Name$Timestamp (Current)$Timestamp (Archive)$"
                     print "$---------$-------------------$-------------------$"}
                     {cmd="ls -ld --full-time "qq $3 qq" 2>/dev/null | awk '\''{print $6"qq" "qq"$7}'\'' | cut -d : -f1-2"
-                     if ((cmd|getline x) > 0) {print "$"$3"$"x"$"$1" "$2} else {print "$"$3"$ $"$1" "$2}
+                     if ((cmd|getline x) > 0) {print "$"$3"$"x"$"$1} else {print "$"$3"$ $"$1}
                     }' | awk -F"$" '{if($3 != $4 && NR > 2){$0=$0"$*"}; print}';
        ls | grep -vxf <(unzip -l "$filename" | sed 1,3d | awk '(NF>3){$1="";$2="";$3="";print $0}' | sed -e 's/^[[:space:]]*//' | sed 's/^\(.*\)\/$/\1/g') \
        | awk -v qq=\" '{cmd1="ls -ld --full-time "qq $0 qq" | awk '\'' {print $6"qq" "qq"$7} '\'' | cut -d : -f1-2"; if((cmd1|getline x) > 0){print "$"$0"$"x"$ $*"}}' \
@@ -337,25 +341,30 @@ echo "Current Directory: $PWD"
 mkdir -p "$BACKUPPATH"
 mkdir -p "$(dirname "$BKP_TARGET_PATH")"
 
-read -p "Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): " descr
-if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
-   descr="$descr"'    '[RECURSIVE]
-fi
+flags=""
 if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
-   descr="$descr"'    '[INCREMENTAL]
+   flags="$flags"' '[I]
+else
+   flags="$flags"' '[F]
 fi
-if [ -n "$descr" ]; then
+if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
+   flags="$flags"' '[R]
+fi
+
+read -p "Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): " descr
+
+if [[ -n "$descr" ||  -n "$flags" ]]; then
  dirwc=$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')
  bkpid=$(date -d "$(basename "$BKP_TARGET_PATH" | sed "s/^.\{$dirwc\}_\(.*\)$/\\1/g;s/_/ /g;s/\./:/g")" +"%s")
  descrvarname=DESCR_$bkpid
- declare $descrvarname="$descr"
+ declare $descrvarname="$flags:$descr"
  echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$BKP_TARGET_PATH")/meta.dat
 fi
 
 CHECKSUMSTORE()
 {
   if [[ $1 = "-p" ]]; then
-    archivedfiles=$(unzip -l "$BKP_TARGET_PATH".zip | sed 1,3d | awk '{print $4}' | grep -Ev "^\s*$")
+    archivedfiles=$(unzip -l "$BKP_TARGET_PATH".zip | sed 1,3d | tac | sed 1,2d | tac | awk '{$1="";$2="";$3=""; print $0}' | sed 's/^[ ]*//g')
     for lin in $archivedfiles ; do echo "cksum $(cksum $lin)"; done >> "$BKP_TARGET_PATH".log 2>/dev/null
     zip -gj "$BKP_TARGET_PATH".zip "$BKP_TARGET_PATH".log
   elif [[ $1 = "-g" ]]; then
@@ -364,9 +373,10 @@ CHECKSUMSTORE()
 }
 
 zipopt=""
+OLDIFS=$IFS;IFS=$'\n'
 if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
    if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
-      files=$(find . -exec cksum {} + 2>/dev/null | sed 's/ [.]\// /g' | grep -vxf <(CHECKSUMSTORE -g) | awk 'ORS=" " {print $3}')
+      files=$(find . -exec cksum {} + 2>/dev/null | sed 's/ [.]\// /g' | grep -vxf <(CHECKSUMSTORE -g) | cut -d ' ' -f3-)
       [[ -n "${files// /}" ]] || { echo "No Files To Archive"; exit 0; }
    else
       files=*
@@ -374,14 +384,14 @@ if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
    zipopt="-r"
 else
    if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
-      files=$(cksum * 2>/dev/null | grep -vxf <(CHECKSUMSTORE -g) | awk 'ORS=" " {print $3}')
+      files=$(cksum * 2>/dev/null | grep -vxf <(CHECKSUMSTORE -g) | cut -d ' ' -f3-)
       [[ -n "${files// /}" ]] || { echo "No Files To Archive"; exit 0; }
    else
       files=./*
    fi
 fi
 set -x
-zip $zipopt "$BKP_TARGET_PATH".zip $files  | tee "$BKP_TARGET_PATH".log
+for fil in $files; do zip $zipopt "$BKP_TARGET_PATH".zip "$fil"; done | tee "$BKP_TARGET_PATH".log
 { set +x; } 2>/dev/null;
 CHECKSUMSTORE -p
 echo "Command output directed to:"
