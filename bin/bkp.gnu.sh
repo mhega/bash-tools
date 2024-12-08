@@ -11,10 +11,9 @@ USAGE()
   echo "Usage: bkp [-l | -c | -r | -m] [--FORCE] [-R] [-i]"
   echo
   OPTIONS
-  echo "Backup Target Directory: "
-  echo $BACKUPPATH"$PWD" | sed "s/\(\/\s*\"*\s*\)\./\1/g"
+  echo "Current directory:                               " $PWD
+  echo "Backup target path of the current directory:     " $BACKUPPATH"$PWD" | sed "s/\(\/\s*\"*\s*\)\./\1/g"
   echo
-  exit 0
 }
 OPTIONS()
 {
@@ -35,6 +34,18 @@ BACKUPOPT=$((2#000))
 FORCEOPT=$((2#001))
 RECURSIVEOPT=$((2#010))
 INCREMENTALOPT=$((2#100))
+
+LISTBACKUPDETAILS()
+{
+	if [[ $1 = "-h" ]]; then
+		echo 'Path$Latest Archive$Timestamp'
+		echo '----$--------------$---------'
+	else
+		for lin in $(find $BACKUPPATH/ -name meta.dat); do
+			echo $(grep -E "^WORKDIR:" $lin | sed 's/^WORKDIR:\(.*\)/\1/g')'$'$(ls -ltr --full-time "$(dirname $lin)"/*zip | grep -E "_[0-9]{4}\-[0-9]{2}\-[0-9]{2}_([(0-9)\.]){9}zip" | tail -1 | awk '{$1="";$2="";$3="";$4="";$5=""; $8=""; print}' | xargs | awk -F/ '{print $NF "$" $1}')
+		done | rev | cut -d . -f2- | rev
+	fi
+}
 
 while [ True ]; do
   if [[ -z "$1" ]]; then
@@ -77,6 +88,15 @@ while [ True ]; do
 	shift 1
   else
     USAGE
+    backuplist=$(LISTBACKUPDETAILS)
+    if [[ $(echo $backuplist | wc -l) != 0 ]]; then
+	    echo "Full list of backed up directories:"
+	    echo "-----------------------------------"
+	    echo
+	    echo -e "$(LISTBACKUPDETAILS -h)\\n$backuplist" | column -t -s$'$'
+	    echo
+    fi
+    exit 0
   fi
 done
 
@@ -372,6 +392,7 @@ CHECKSUMSTORE()
   fi
 }
 
+touch $(dirname "$BKP_TARGET_PATH")/meta.dat; echo "WORKDIR:""$PWD" | grep -vxf $(dirname "$BKP_TARGET_PATH")/meta.dat >> $(dirname "$BKP_TARGET_PATH")/meta.dat
 zipopt=""
 OLDIFS=$IFS;IFS=$'\n'
 if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
