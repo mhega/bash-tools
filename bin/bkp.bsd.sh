@@ -1,7 +1,7 @@
 #! /bin/bash
 
 BACKUPPATH="/Users/mhega/bkp.d"
-
+# SECONDARYBACKUPPATH="/Users/mhega/bkp.s"    #Define only if a secondary storage path is desired.
 
 USAGE()
 {
@@ -109,6 +109,11 @@ done
 suffix=$(date +"%Y-%m-%d_%H.%M.%S")
 BKP_TARGET_PATH=$(echo $BACKUPPATH"${PWD// /_}"/"$(basename ${PWD// /_})"_$suffix | sed "s/\(\/\s*\"*\s*\)\./\1/g")
 echo "$BKP_TARGET_PATH" | grep -qE "\s" && echo "Directories Containing Space Characters Are Not Supported.." && exit 1
+if [[ -n $SECONDARYBACKUPPATH ]]; then
+     SEC_BKP_NAME=$(echo $SECONDARYBACKUPPATH"${PWD// /_}" | sed "s/\(\/\s*\"*\s*\)\./\1/g").zip
+     echo "$SEC_BKP_NAME" | grep -qE "\s" && echo "Directories Containing Space Characters Are Not Supported.." && exit 1
+fi
+
 BKP_DIR_NAME=$(basename ${PWD// /_} | sed "s/^\(\.\)*\(.*\)$/\2/g")
 
 DISPLAY()
@@ -412,6 +417,9 @@ fi
 echo "Current Directory: $PWD"
 mkdir -p "$BACKUPPATH"
 mkdir -p "$(dirname "$BKP_TARGET_PATH")"
+if [[ -n $SECONDARYBACKUPPATH && -n $SEC_BKP_NAME ]]; then
+    mkdir -p "$(dirname "$SEC_BKP_NAME")"
+fi
 
 flags=""
 if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
@@ -468,5 +476,10 @@ for fil in $files; do zip $zipopt "$BKP_TARGET_PATH".zip "$fil"; done | tee "$BK
 { set +x; } 2>/dev/null; 
 CHECKSUMSTORE -p
 IFS=$OLDIFS
+if [[ -n $SECONDARYBACKUPPATH && -n $SEC_BKP_NAME ]]; then
+   set -x
+   zip -rgj $SEC_BKP_NAME "$BKP_TARGET_PATH"*
+   { set +x; } 2>/dev/null; 
+fi
 echo "Command output directed to:"
 echo "$BKP_TARGET_PATH".log
