@@ -13,6 +13,9 @@ USAGE()
   OPTIONS
   echo "Current directory:                               " $PWD
   echo "Backup target path of the current directory:     " $BACKUPPATH"$PWD" | sed "s/\(\/\s*\"*\s*\)\./\1/g"
+  if [[ -n $SECONDARYBACKUPPATH ]]; then
+    echo "Secondary backup:                                " "$SECONDARYBACKUPPATH"$PWD.zip | sed "s/\(\/\s*\"*\s*\)\./\1/g"
+  fi
   echo
 }
 OPTIONS()
