@@ -115,6 +115,26 @@ fi
 
 BKP_DIR_NAME=$(basename ${PWD// /_} | sed "s/^\(\.\)*\(.*\)$/\2/g")
 
+
+CHECKSUMSTORE()
+{
+  if [[ $1 = "-p" ]]; then
+   (fil="$BKP_TARGET_PATH".zip; echo "$(echo $fil | awk -F/ '{print $NF}'):$(cksum $fil | awk '{print $1}')") >> "$BKP_TARGET_PATH".log 2>/dev/null
+    archivedfiles=$(unzip -l "$BKP_TARGET_PATH".zip | sed 1,3d | tac | sed 1,2d | tac | awk '{$1="";$2="";$3=""; print $0}' | sed 's/^[ ]*//g')
+    for lin in $archivedfiles ; do echo "cksum $(cksum $lin)"; done >> "$BKP_TARGET_PATH".log 2>/dev/null
+    zip -gj "$BKP_TARGET_PATH".zip "$BKP_TARGET_PATH".log
+  elif [[ $1 = "-g" ]]; then
+    shift 1
+    if [[ -n $1 ]]; then
+      out=$(path=$(echo $1 | sed 's/\(.*\)\.zip$/\1/g'); fil=$(echo $path | awk -F/ '{print $NF}'); unzip -p "$path".zip "$fil".log 2>/dev/null | grep "$fil" | cut -d : -f2)
+      [[ -z $out ]] && return 1 || echo $out
+    else
+      for lin in "$(dirname $BKP_TARGET_PATH)"/*zip; do unzip -p $lin $(basename $lin | sed 's/zip$/log/g'); done | grep -h cksum | sed 's/cksum //g' | grep -Ev "$\s*^"
+    fi
+  fi
+}
+
+
 DISPLAY()
 {
  echo
@@ -122,32 +142,20 @@ DISPLAY()
  echo "-------------------"
  echo
  metafile=$(dirname "$BKP_TARGET_PATH")/meta.dat
- ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null | tr \\t \\n \
- |  awk -v dirwc="$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')" \
-        -v metafile=$metafile \
-        -v q=\' -v qq=\" \
-        'BEGIN{ORS=""
-              print "$Backup ID$Timestamp$Checksum$Flags$Description\n"
-              print "$---------$---------$--------$-----$-----------\n"}
-         {cmd0="date -d "qq"$(basename '\''"$1"'\'' | sed '\''s/^.\\{"dirwc"\\}_\\(.*\\)\\.zip$/\\1/g;s/_/ /g;s/\\./:/g'\'')"qq" +"qq"%s"qq
-         cmd1="ls -l --full-time '\''"$1"'\'' | awk '\'' {print $6"qq" "qq"$7}'\'' | cut -d . -f1";
-         cmd2="cksum '\''"$1"'\'' | awk '\''{print $1}'\''"
-         cmd3="[ -f "metafile" ] && id=DESCR_$("cmd0") && grep $id "metafile" | sed '\''s/^\\([^:]*\\):\\([^:]*\\):\\(.*\\)$/\\2/g'\''" 
-         cmd4="[ -f "metafile" ] && id=DESCR_$("cmd0") && grep $id "metafile" | sed '\''s/^\\([^:]*\\):\\([^:]*\\):\\(.*\\)$/\\3/g'\''" 
-         print "$"
-         if( (cmd0|getline x) > 0) { print x; close(cmd0) } else exit 1
-         print "$"
-         if( (cmd1|getline x) > 0) { print x; close(cmd1) } else exit 1
-         print "$"
-         if( (cmd2|getline x) > 0) { print x; close(cmd2) } else exit 1
-         print "$"
-         if( (cmd3|getline x) > 0) { print x; close(cmd3) }
-         print "$"
-         if( (cmd4|getline x) > 0) { print x; close(cmd4) }         
-         print "\n"}
-         END{if (NR==0) {exit 1}}' \
-| column -t  -s$'$'
- if [ ${PIPESTATUS[2]} != 0 ] ; then
+ ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null | (
+  echo '$Backup ID$Timestamp$Checksum$Flags$Description'
+  echo '$---------$---------$--------$-----$-----------'
+  for lin in $(cat $1); do
+      dirwc="$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')"
+      cmd0="$(date -d "$(basename "$lin" | sed "s/^.\{$dirwc\}_\(.*\)\.zip$/\1/g;s/_/ /g;s/\./:/g")" +"%s")"
+      cmd1=$(ls -l --full-time "$lin" | awk ' {print $6" "$7}' | cut -d . -f1);
+      cmd2=$(cksum "$lin" | awk '{print $1}')
+      cmd3=$(CHECKSUMSTORE -g "$lin" || echo $cmd2)
+      cmd4=$([ -f "$metafile" ] && id=DESCR_$cmd0 && grep $id "$metafile" | sed 's/^\([^:]*\):\([^:]*\):\(.*\)$/\2$\3/g')
+      echo '$'$cmd0'$'$cmd1'$'$cmd3'$'$cmd4
+  done
+   )  | column -t -s$'$'
+ if [ ${PIPESTATUS[0]} != 0 ] ; then
    exit 1
  fi
 }
@@ -160,20 +168,14 @@ DISPLAYL()
  echo "-------------------"
  echo
 
- ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null | tr \\t \\n \
- |  awk -v qq=\"  'BEGIN{ORS=""
-              print "$Path$Timestamp$Checksum\n"
-              print "$----$---------$--------\n"}
-         {cmd1="ls -l --full-time "$1" | awk '\'' {print $6"qq" "qq"$7}'\'' | cut -d . -f1";
-         cmd2="cksum "$1" | awk '\''{print $1}'\''"
-         print "$"
-         print $1
-         print "$"
-         cmd1|getline x; print x
-         print "$"
-         cmd2|getline x; print x
-         print "\n"}' \
- | column -t -s$'$'
+ (echo '$Path$Timestamp$Checksum'
+  echo '$----$---------$--------'
+ for lin in $(ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null); do
+    cmd1=$(ls -l --full-time $lin | awk '{print $6" "$7}' | cut -d . -f1)
+    cmd2=$(cksum $lin | awk '{print $1}')
+    cmd3=$(CHECKSUMSTORE -g "$lin" || echo $cmd2)
+    echo '$'$lin'$'$cmd1'$'$cmd3
+ done) | column -t -s$'$'
  echo
  exit 0
 }
@@ -392,16 +394,6 @@ if [[ -n "$descr" ||  -n "$flags" ]]; then
  echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$BKP_TARGET_PATH")/meta.dat
 fi
 
-CHECKSUMSTORE()
-{
-  if [[ $1 = "-p" ]]; then
-    archivedfiles=$(unzip -l "$BKP_TARGET_PATH".zip | sed 1,3d | tac | sed 1,2d | tac | awk '{$1="";$2="";$3=""; print $0}' | sed 's/^[ ]*//g')
-    for lin in $archivedfiles ; do echo "cksum $(cksum $lin)"; done >> "$BKP_TARGET_PATH".log 2>/dev/null
-    zip -gj "$BKP_TARGET_PATH".zip "$BKP_TARGET_PATH".log
-  elif [[ $1 = "-g" ]]; then
-    for lin in "$(dirname $BKP_TARGET_PATH)"/*zip; do unzip -p $lin $(basename $lin | sed 's/zip$/log/g'); done | grep -h cksum | sed 's/cksum //g' | grep -Ev "$\s*^"
-  fi
-}
 
 touch $(dirname "$BKP_TARGET_PATH")/meta.dat; echo "WORKDIR:""$PWD" | grep -vxf $(dirname "$BKP_TARGET_PATH")/meta.dat >> $(dirname "$BKP_TARGET_PATH")/meta.dat
 zipopt=""
