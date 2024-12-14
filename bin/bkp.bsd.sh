@@ -3,8 +3,11 @@
 BACKUPPATH="/Users/mhega/bkp.d"
 # SECONDARYBACKUPPATH="/Users/mhega/bkp.s"    #Define only if a secondary storage path is desired.
 
+version=2.0
 USAGE()
 {
+  echo
+  echo bkp $version
   echo
   echo "Manage backup/restore of current directory."
   echo  
