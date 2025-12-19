@@ -4,7 +4,7 @@ base=/Users/mhega/csdir.d/Cases
 Usage()
 {
  echo
- echo "Usage: csdir [-s [Site [-i]]] [-c] [Case] [-h]"
+ echo "Usage: csdir [-s [Site [-i]]] [-c] [Case] [-h] [-r Case]"
  echo
 }
 Options()
@@ -28,6 +28,7 @@ Options()
  echo "csdir -s -c                     List all registered sites and linked cases"
  echo "csdir 123456                    Go to or create case 123456"
  echo "csdir -c 123456                 Go to or create case 123456"
+ echo "csdir -r 123456                 Remove empty directory associated with case 123456"    
  echo "csdir -s testsite               List all cases that are linked to testsite"    
  echo "csdir -s testsite -i            Input site description for testsite"
  echo "csdir -s testsite 123456        Go to or create case 123456, and link with testsite if not linked (Create testsite if it does not exist)"
@@ -241,17 +242,21 @@ DISPLAYALLCASES()
 
  metafile=$base/case_meta.dat
 ls -t $base/$dir 2> /dev/null | tr \\t \\n | ([[ -n $sitename ]] && grep -w $sitename || grep '$')  | ([[ -n $numrecords ]] && head -$numrecords || grep '$') |  awk         -v metafile=$metafile         -v base=$base         -v dir=$dir         -v site=$site         -v q=\' -v qq=\"         'BEGIN{ORS=""
-              print "\tCase ID\tSite\tDate Last Visited\tDescription\n"
-              print "\t-------\t----\t-----------------\t-----------\n"}
+              print "\tCase ID\tSite\tFile Count\tDate Last Visited\tDescription\n"
+              print "\t-------\t----\t----------\t-----------------\t-----------\n"}
          {
          cmds="files=("base"/sites/*/"$1"); [ -d "qq"${files[0]}"qq" ] && (ls -d "base"/sites/*/"$1" | grep -Eo /sites/.*/ | cut -d "q"/"q" -f 3 | paste -s -d, /dev/stdin) || echo "qq" "qq
          cmddate="stat -l -t '%FT%T' " base "/" dir "/" $1 " | awk '\'' {print $6}'\'' | cut -d '\''T'\'' -f 1";
          #cmd2="basename "$1
          cmddescr="[ -f "metafile" ] && id=DESCR_$(echo "$1" | md5 | rev | cut -c 1-32 | rev) && declare $id="qq"$(grep $id "metafile" | tail -1 | sed '\''s/^\\([^:]*\\):\\(.*\\)$/\\2/g'\'')"qq" && echo ${!id}"
+         #cmdcount="ls -ld " base "/" dir "/"$1"/* 2>/dev/null | wc -l | sed "q"s/ //g"q
+         cmdcount="ls -ld "qq base "/" dir "/"$1qq"/* 2>/dev/null | wc -l | sed "q"s/ //g"q
          print "\t"
          print $1
          print "\t"
          if( (cmds|getline x) > 0) { print x; close(cmds) }
+         print "\t"
+         if( (cmdcount|getline x) > 0) { print x; close(cmdcount) }
          print "\t"
          if( (cmddate|getline x) > 0) { print x; close(cmddate) } else exit 1
          print "\t"
@@ -277,6 +282,25 @@ while [ True ]; do
   elif [ $1 = "-h" ]; then
     Help
     exit 0
+  elif [ $1 = "-r" ]; then
+    shift 1
+    if [[ -z $1 || -n $2 ]]; then
+      error="t"
+      break
+    else
+      rfile=$(echo $1 | tr '[:lower:]' '[:upper:]')
+      fullpath=$base/$(echo $dir | tr '[:lower:]' '[:upper:]')/$rfile
+      echo Removing "$rfile"
+      set -x
+      rm -d "$fullpath" || exit $?
+      { set +x; }
+      for line in $(ls -F $base/sites/*/$rfile 2>/dev/null || true | grep -E "@$"); do
+        sitefilepath=$(sed 's/@$//g' <(echo $line))
+        #echo $sitefilepath
+        ls -l $sitefilepath | grep -q "$fullpath" && set -x; unlink "$sitefilepath"; { set +x; }
+      done
+      exit $?
+    fi
   elif [ $1 = "-c" -o $1 = "--case" ]; then
     if [[ -n $case || $allcases = "t" ]]; then
       error="t"

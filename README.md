@@ -22,11 +22,13 @@ A collection of bash scripts for simplifying day-to-day OS management tasks incl
 
   > ### Example
 ```console
-mhega@ubuntu2404:~/tmp$ bkp -h
+mhega@ubuntu2404:~/test$ bkp -h
+
+bkp 2.0
 
 Manage backup/restore of current directory.
 
-Usage: bkp [-l | -c | -r | -m] [--FORCE] [-R]
+Usage: bkp [-l | -c | -r | -m] [--FORCE] [-R] [-i]
 
 Options:
 l               List all backup files of the current directory including their timestamps and checksums.
@@ -35,102 +37,181 @@ r               Restore contents of select backup into a subdirectory within the
 m               Move old backup files (5 day-old or older) to a sub-directory (old_files).
 --FORCE         Force backing up of the current directory irrespective of the disk usage.
 R               Recursively archive all subdirectories.
+i               Incremental (differential) archive.
 
                 Run bkp command with only one of -l, -c, -r, -m options at a time.
                 Running bkp command without any option, or with options -R and/or --FORCE will take a new backup.
 
-Backup Target Directory: 
-/home/mhega/bkp.d/home/mhega/tmp
+Current directory:                                /home/mhega/test
+Backup target path of the current directory:      /home/mhega/bkp.d/home/mhega/test
 
-mhega@ubuntu2404:~/tmp$
-mhega@ubuntu2404:~/tmp$
-mhega@ubuntu2404:~/tmp$
-mhega@ubuntu2404:~/tmp$ ls -l
+Full list of backed up directories:
+-----------------------------------
+
+Path                              Latest Archive                Timestamp
+----                              --------------                ---------
+/home/mhega/etc/Courses/ALL/TEST  TEST_2024-12-12_21.21.24.zip  2024-12-12 21:21:25
+/home/mhega/tmp                   tmp_2024-12-14_00.31.59.zip   2024-12-14 00:32:04
+/home/mhega/.sh                   sh_2024-12-13_02.00.13.zip    2024-12-13 02:00:15
+
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ ls -l
 total 4
--rw-rw-r-- 1 mhega mhega 28 Oct 16 22:48 file_1
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ bkp
+-rw-rw-r-- 1 mhega mhega 4 Dec 14 00:36 file1
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp 
 
 ** TOTAL SIZE: 8 BYTES **
 
-Current Directory: /home/mhega/tmp
-Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): First Backup 
-+ '[' 0 = 2 ']'
-+ tee /home/mhega/bkp.d/home/mhega/tmp/tmp_2024-10-16_23.09.50.log
-+ zip /home/mhega/bkp.d/home/mhega/tmp/tmp_2024-10-16_23.09.50.zip ./file_1
-  adding: file_1 (deflated 18%)
+Current Directory: /home/mhega/test
+Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): First Backup
++ for fil in $files
++ zip /home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.37.19.zip ./file1
++ tee /home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.37.19.log
+  adding: file1 (stored 0%)
+  adding: test_2024-12-14_00.37.19.log (deflated 4%)
 Command output directed to:
-/home/mhega/bkp.d/home/mhega/tmp/tmp_2024-10-16_23.09.50.log
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ bkp -c
+/home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.37.19.log
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp -c
 
 Backup List Display
 -------------------
 
-  Backup ID   Timestamp            Checksum    Description
-  ---------   ---------            --------    -----------
-  1729120190  2024-10-16 23:10:03  1923602612  First Backup
+  Backup ID   Timestamp            Checksum    Flags  Description
+  ---------   ---------            --------    -----  -----------
+  1734136639  2024-12-14 00:37:45  1753383026   [F]   First Backup
 
-Type the ID of the desired backup to compare or Q to quit: 1729120190
+Type the ID of the desired backup to compare or Q to quit: 1734136639
 
-tmp_2024-10-16_23.09.50.zip will be compared with the current path..
+test_2024-12-14_00.37.19.zip will be compared with the current path..
 Unless Backup is Recursive, Sub-directories may not undergo deep comparison.
 
-  File Name  Timestamp (Current)  Timestamp (Archive)  
-  ---------  -------------------  -------------------  
-  file_1     2024-10-16 22:48     2024-10-16 22:48     
+  File Name                     Timestamp (Current)  Timestamp (Archive)  
+  ---------                     -------------------  -------------------  
+  file1                         2024-12-14 00:36     2024-12-14 00:36     
+  test_2024-12-14_00.37.19.log                       2024-12-14 00:37     *
 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ echo Update >> file_1 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ bkp -c
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ echo New_file > file2
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp -c
 
 Backup List Display
 -------------------
 
-  Backup ID   Timestamp            Checksum    Description
-  ---------   ---------            --------    -----------
-  1729120190  2024-10-16 23:10:03  1923602612  First Backup
+  Backup ID   Timestamp            Checksum    Flags  Description
+  ---------   ---------            --------    -----  -----------
+  1734136639  2024-12-14 00:37:45  1753383026   [F]   First Backup
 
-Type the ID of the desired backup to compare or Q to quit: 1729120190
+Type the ID of the desired backup to compare or Q to quit: 1734136639
 
-tmp_2024-10-16_23.09.50.zip will be compared with the current path..
+test_2024-12-14_00.37.19.zip will be compared with the current path..
 Unless Backup is Recursive, Sub-directories may not undergo deep comparison.
 
-  File Name  Timestamp (Current)  Timestamp (Archive)  
-  ---------  -------------------  -------------------  
-  file_1     2024-10-16 23:10     2024-10-16 22:48     *
+  File Name                     Timestamp (Current)  Timestamp (Archive)  
+  ---------                     -------------------  -------------------  
+  file1                         2024-12-14 00:36     2024-12-14 00:36     
+  test_2024-12-14_00.37.19.log                       2024-12-14 00:37     *
+  file2                         2024-12-14 00:45                          *
 
-mhega@ubuntu2404:~/tmp$
-mhega@ubuntu2404:~/tmp$
-mhega@ubuntu2404:~/tmp$ 
-mhega@ubuntu2404:~/tmp$ bkp -c
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp -i
+
+** TOTAL SIZE: 12 BYTES **
+
+Current Directory: /home/mhega/test
+Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): Second backup
++ for fil in $files
++ zip /home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.46.00.zip file2
++ tee /home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.46.00.log
+  adding: file2 (stored 0%)
+  adding: test_2024-12-14_00.46.00.log (deflated 4%)
+Command output directed to:
+/home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.46.00.log
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp -c
 
 Backup List Display
 -------------------
 
-  Backup ID   Timestamp            Checksum    Description
-  ---------   ---------            --------    -----------
-  1729120190  2024-10-16 23:10:03  1923602612  First Backup
+  Backup ID   Timestamp            Checksum    Flags  Description
+  ---------   ---------            --------    -----  -----------
+  1734136639  2024-12-14 00:37:45  1753383026   [F]   First Backup
+  1734137160  2024-12-14 00:46:10  3638790201   [I]   Second backup
 
-Type the ID of the desired backup to compare or Q to quit: 1729120190
+Type the ID of the desired backup to compare or Q to quit: 1734137160
 
-tmp_2024-10-16_23.09.50.zip will be compared with the current path..
+test_2024-12-14_00.46.00.zip will be compared with the current path..
 Unless Backup is Recursive, Sub-directories may not undergo deep comparison.
 
-  File Name  Timestamp (Current)  Timestamp (Archive)  
-  ---------  -------------------  -------------------  
-  file_1     2024-10-16 23:10     2024-10-16 22:48     *
-  file_2     2024-10-16 23:11                          *
+  File Name                     Timestamp (Current)  Timestamp (Archive)  
+  ---------                     -------------------  -------------------  
+  file2                         2024-12-14 00:45     2024-12-14 00:45     
+  test_2024-12-14_00.46.00.log                       2024-12-14 00:46     *
+  file1                         2024-12-14 00:36                          *
 
-mhega@ubuntu2404:~/tmp$
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp -i
+
+** TOTAL SIZE: 12 BYTES **
+
+Current Directory: /home/mhega/test
+Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): Third Backup    
+No Files To Archive
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp
+
+** TOTAL SIZE: 12 BYTES **
+
+Current Directory: /home/mhega/test
+Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): New full backup        
++ for fil in $files
++ zip /home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.47.37.zip ./file1
++ tee /home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.47.37.log
+  adding: file1 (stored 0%)
++ for fil in $files
++ zip /home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.47.37.zip ./file2
+  adding: file2 (stored 0%)
+  adding: test_2024-12-14_00.47.37.log (deflated 28%)
+Command output directed to:
+/home/mhega/bkp.d/home/mhega/test/test_2024-12-14_00.47.37.log
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ bkp -c
+
+Backup List Display
+-------------------
+
+  Backup ID   Timestamp            Checksum    Flags  Description
+  ---------   ---------            --------    -----  -----------
+  1734136639  2024-12-14 00:37:45  1753383026   [F]   First Backup
+  1734137160  2024-12-14 00:46:10  3638790201   [I]   Second backup
+  1734137257  2024-12-14 00:47:54  1794373418   [F]   New full backup
+
+Type the ID of the desired backup to compare or Q to quit: 1734137257
+
+test_2024-12-14_00.47.37.zip will be compared with the current path..
+Unless Backup is Recursive, Sub-directories may not undergo deep comparison.
+
+  File Name                     Timestamp (Current)  Timestamp (Archive)  
+  ---------                     -------------------  -------------------  
+  file1                         2024-12-14 00:36     2024-12-14 00:36     
+  file2                         2024-12-14 00:45     2024-12-14 00:45     
+  test_2024-12-14_00.47.37.log                       2024-12-14 00:47     *
+
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$ 
+mhega@ubuntu2404:~/test$
 ```
 
 ## csdir

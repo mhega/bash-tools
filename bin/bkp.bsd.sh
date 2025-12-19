@@ -1,20 +1,25 @@
 #! /bin/bash
 
 BACKUPPATH="/Users/mhega/bkp.d"
+# SECONDARYBACKUPPATH="/Users/mhega/bkp.s"    #Define only if a secondary storage path is desired.
 
-
+version=2.0
 USAGE()
 {
   echo
+  echo bkp $version
+  echo
   echo "Manage backup/restore of current directory."
   echo  
-  echo "Usage: bkp [-l | -c | -v | -r | -m | --FORCE | -R]"
+  echo "Usage: bkp [-l | -c | -v | -r | -m] [--FORCE] [-R] [-i]"
   echo
   OPTIONS
-  echo "Backup Target Directory: "
-  echo $BACKUPPATH"$PWD" | sed "s/\(\/\s*\"*\s*\)\./\1/g"
+  echo "Current directory:                               " $PWD
+  echo "Backup target path of the current directory:     " $BACKUPPATH"$PWD" | sed "s/\(\/\s*\"*\s*\)\./\1/g"
+  if [[ -n $SECONDARYBACKUPPATH ]]; then
+    echo "Secondary backup:                                " "$SECONDARYBACKUPPATH"$PWD.zip | sed "s/\(\/\s*\"*\s*\)\./\1/g"
+  fi
   echo
-  exit 0
 }
 OPTIONS()
 {
@@ -26,14 +31,28 @@ OPTIONS()
   echo "m               Move old backup files (5 day-old or older) to a sub-directory (old_files)."
   echo "--FORCE         Force backing up of the current directory irrespective of the disk usage."
   echo "R               Recursively archive all subdirectories."
+  echo "i               Incremental (differential) archive." 
   echo
   echo "                Run bkp command with only one option at a time."
   echo "                Running bkp command without any option will take a new backup."
   echo
 }
-BACKUPOPT=$((2#00))
-FORCEOPT=$((2#01))
-RECURSIVEOPT=$((2#10))
+BACKUPOPT=$((2#000))
+FORCEOPT=$((2#001))
+RECURSIVEOPT=$((2#010))
+INCREMENTALOPT=$((2#100))
+
+LISTBACKUPDETAILS()
+{
+	if [[ $1 = "-h" ]]; then
+		echo 'Path$Latest Archive$Timestamp'
+		echo '----$--------------$---------'
+	else
+		for lin in $(find $BACKUPPATH/ -name meta.dat); do
+			echo $(grep -E "^WORKDIR:" $lin | sed 's/^WORKDIR:\(.*\)/\1/g')'$'$(stat -l -t '%FT%T' "$(dirname $lin)"/*zip | grep -E "_[0-9]{4}\-[0-9]{2}\-[0-9]{2}_([(0-9)\.]){9}zip" | tail -1 | awk '{$1="";$2="";$3="";$4="";$5=""; print}' | xargs | awk -F/ '{print $NF "$" $1}')
+		done | sed 's/^\(\$\)/ \1/g; s/\(\$\)\(\$\)/\1 \2/g'
+	fi
+}
 
 while [ True ]; do
   if [[ -z "$1" ]]; then
@@ -53,7 +72,7 @@ while [ True ]; do
   elif [[ -z "$COMMANDOPT" && "$1" = "-m" ]]; then
         COMMANDOPT="move"
         shift 1
-  elif [[ ( -z "$COMMANDOPT" || "$COMMANDOPT" = "backup" ) && ( "$1" = "--FORCE" || "$1" = "-R" ) ]]; then
+  elif [[ ( -z "$COMMANDOPT" || "$COMMANDOPT" = "backup" ) && ( "$1" = "--FORCE" || "$1" = "-R" || "$1" = "-i" ) ]]; then
         COMMANDOPT="backup"
         if [[ $1 = "--FORCE" ]]; then
               if [[ $(($BACKUPOPT & $FORCEOPT)) != 0 ]]; then
@@ -69,17 +88,58 @@ while [ True ]; do
               fi
               BACKUPOPT=$(($BACKUPOPT | $RECURSIVEOPT))
         fi
+        if [[ $1 = "-i" ]]; then
+              if [[ $(($BACKUPOPT & $INCREMENTALOPT)) != 0 ]]; then
+                   USAGE
+                   exit 1
+              fi
+              BACKUPOPT=$(($BACKUPOPT | $INCREMENTALOPT))
+        fi
         shift 1
   else
-    USAGE
+        USAGE
+        backuplist=$(LISTBACKUPDETAILS)
+        if [[ $(echo $backuplist | wc -l) != 0 ]]; then
+              echo "Full list of backed up directories:"
+	            echo "-----------------------------------"
+	            echo
+	            echo -e "$(LISTBACKUPDETAILS -h)\\n$backuplist" | column -t -s$'$'
+	            echo
+        fi
+        exit 0
   fi
 done
 
+(cd "$BACKUPPATH") || exit 1
 
 suffix=$(date +"%Y-%m-%d_%H.%M.%S")
 BKP_TARGET_PATH=$(echo $BACKUPPATH"${PWD// /_}"/"$(basename ${PWD// /_})"_$suffix | sed "s/\(\/\s*\"*\s*\)\./\1/g")
 echo "$BKP_TARGET_PATH" | grep -qE "\s" && echo "Directories Containing Space Characters Are Not Supported.." && exit 1
+if [[ -n $SECONDARYBACKUPPATH ]]; then
+     SEC_BKP_NAME=$(echo $SECONDARYBACKUPPATH"${PWD// /_}" | sed "s/\(\/\s*\"*\s*\)\./\1/g").zip
+     echo "$SEC_BKP_NAME" | grep -qE "\s" && echo "Directories Containing Space Characters Are Not Supported.." && exit 1
+fi
+
 BKP_DIR_NAME=$(basename ${PWD// /_} | sed "s/^\(\.\)*\(.*\)$/\2/g")
+
+
+CHECKSUMSTORE()
+{
+  if [[ $1 = "-p" ]]; then
+    (fil="$BKP_TARGET_PATH".zip; echo "$(echo $fil | awk -F/ '{print $NF}'):$(cksum $fil | awk '{print $1}')") >> "$BKP_TARGET_PATH".log 2>/dev/null
+    archivedfiles=$(unzip -l "$BKP_TARGET_PATH".zip | sed 1,3d | tail -r | sed 1,2d | tail -r | awk '{$1="";$2="";$3=""; print $0}' | sed 's/^[ ]*//g')
+    for lin in $archivedfiles ; do echo "cksum $(cksum $lin)"; done >> "$BKP_TARGET_PATH".log 2>/dev/null
+    zip -gj "$BKP_TARGET_PATH".zip "$BKP_TARGET_PATH".log
+  elif [[ $1 = "-g" ]]; then
+    shift 1
+    if [[ -n $1 ]]; then
+      out=$(path=$(echo $1 | sed 's/\(.*\)\.zip$/\1/g'); fil=$(echo $path | awk -F/ '{print $NF}'); unzip -p "$path".zip "$fil".log 2>/dev/null | grep "$fil" | cut -d : -f2)
+      [[ -z $out ]] && return 1 || echo $out
+    else
+      for lin in "$(dirname $BKP_TARGET_PATH)"/*zip; do unzip -p $lin $(basename $lin | sed 's/zip$/log/g'); done | grep -h cksum | sed 's/cksum //g' | grep -Ev "$\s*^"
+    fi
+  fi
+}
 
 DISPLAY()
 {
@@ -87,32 +147,26 @@ DISPLAY()
  echo "Backup List Display"
  echo "-------------------"
  echo
+
  metafile=$(dirname "$BKP_TARGET_PATH")/meta.dat
- ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null | tr \\t \\n \
- |  awk -v dirwc="$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')" \
-        -v metafile=$metafile \
-        -v q=\' -v qq=\" \
-        'BEGIN{ORS=""
-              print "\tBackup ID\tTimestamp\tChecksum\tDescription\n"
-              print "\t---------\t---------\t--------\t-----------\n"}
-         {cmd0="date -jf '\''%Y-%m-%d_%H.%M.%S'\'' $(basename '\''"$1"'\'' | sed '\''s/^.\\{"dirwc"\\}_\\(.*\\)\\.zip$/\\1/g'\'') +%s"
-         cmd1="stat -l -t '%FT%T' '\''"$1"'\'' | awk '\'' {print $6}'\''";
-         cmd2="cksum '\''"$1"'\'' | awk '\''{print $1}'\''"
-         cmd3="[ -f "metafile" ] && id=DESCR_$("cmd0") && declare $id="qq"$(grep $id "metafile" | sed '\''s/^\\([^:]*\\):\\(.*\\)$/\\2/g'\'')"qq" && echo ${!id}"
-         print "\t"
-         if( (cmd0|getline x) > 0) { print x; close(cmd0) } else exit 1
-         print "\t"
-         if( (cmd1|getline x) > 0) { print x; close(cmd1) } else exit 1
-         print "\t"
-         if( (cmd2|getline x) > 0) { print x; close(cmd2) } else exit 1
-         print "\t"
-         if( (cmd3|getline x) > 0) { print x; close(cmd3) }
-         print "\n"}
-         END{if (NR==0) {exit 1}}' \
-| column -t  -s$'\t'
- if [ ${PIPESTATUS[2]} != 0 ] ; then
+ ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null | (
+  echo '$Backup ID$Timestamp$Checksum$Flags$Description'
+  echo '$---------$---------$--------$-----$-----------'
+  for lin in $(cat $1); do
+      dirwc="$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')"
+      cmd0="$(date -jf '%Y-%m-%d_%H.%M.%S' $(basename "$lin" | sed "s/^.\{$dirwc\}_\(.*\)\.zip$/\1/g") +%s)"
+      cmd1=$(stat -l -t '%FT%T' "$lin" | awk '{print $6}');
+      cmd2=$(cksum "$lin" | awk '{print $1}')
+      cmd3=$(CHECKSUMSTORE -g "$lin" || echo $cmd2)
+      cmd4=$([ -f "$metafile" ] && id=DESCR_$cmd0 && declare $id="$(grep $id "$metafile" | sed 's/^\([^:]*\):\([^:]*\):\(.*\)$/\2$\3/g')" && echo ${!id})
+      echo '$'$cmd0'$'$cmd1'$'$cmd3'$'$cmd4
+  done
+   )  | column -t -s$'$'
+ if [ ${PIPESTATUS[0]} != 0 ] ; then
    exit 1
  fi
+
+
 }
 
 
@@ -123,20 +177,15 @@ DISPLAYL()
  echo "-------------------"
  echo
 
- ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null | tr \\t \\n \
- |  awk 'BEGIN{ORS=""
-              print "\tPath\tTimestamp\tChecksum\n"
-              print "\t----\t---------\t--------\n"}
-         {cmd1="stat -l -t '%FT%T' "$1" | awk '\'' {print $6}'\''";
-         cmd2="cksum "$1" | awk '\''{print $1}'\''"
-         print "\t"
-         print $1
-         print "\t"
-         cmd1|getline x; print x
-         print "\t"
-         cmd2|getline x; print x
-         print "\n"}' \
- | column -t
+ (echo '$Path$Timestamp$Checksum'
+  echo '$----$---------$--------'
+ for lin in $(ls $(dirname $BKP_TARGET_PATH)/*zip 2> /dev/null); do
+    cmd1=$(stat -l -t '%FT%T' $lin | awk '{print $6}')
+    cmd2=$(cksum $lin | awk '{print $1}')
+    cmd3=$(CHECKSUMSTORE -g "$lin" || echo $cmd2)
+    echo '$'$lin'$'$cmd1'$'$cmd3
+ done) | column -t -s$'$'
+
  echo
  exit 0
 }
@@ -379,23 +428,58 @@ fi
 echo "Current Directory: $PWD"
 mkdir -p "$BACKUPPATH"
 mkdir -p "$(dirname "$BKP_TARGET_PATH")"
+if [[ -n $SECONDARYBACKUPPATH && -n $SEC_BKP_NAME ]]; then
+    mkdir -p "$(dirname "$SEC_BKP_NAME")"
+fi
+
+flags=""
+if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
+   flags="$flags"' '[I]
+else
+   flags="$flags"' '[F]
+fi
+if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
+   flags="$flags"' '[R]
+fi
 
 read -p "Input a single-line backup description and/or hit NewLine to continue (CTRL-C to abort and exit): " descr
-if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
-   descr="$descr"'\t'[RECURSIVE]
-fi
-if [ -n "$descr" ]; then
+
+if [[ -n "$descr" ||  -n "$flags" ]]; then
  dirwc=$(basename $BKP_DIR_NAME | awk '{printf $1}' | wc -c | awk '{printf $1}')
  bkpid=$(date -jf '%Y-%m-%d_%H.%M.%S' $(basename "$BKP_TARGET_PATH" | sed "s/^.\{$dirwc\}_\(.*\)$/\\1/g") +%s)
  descrvarname=DESCR_$bkpid
- declare $descrvarname="$descr"
- echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\(.*\)\)$/\2:\3/g' >> $(dirname "$BKP_TARGET_PATH")/meta.dat
+ declare $descrvarname="$flags:$descr"
+ echo $descrvarname:${!descrvarname} | sed 's/^\(\([^:]*\):\([^:]*\):\(.*\)\)$/\2:\3:\4/g' >> $(dirname "$BKP_TARGET_PATH")/meta.dat
+fi
+
+touch $(dirname "$BKP_TARGET_PATH")/meta.dat; echo "WORKDIR:""$PWD" | grep -vxf $(dirname "$BKP_TARGET_PATH")/meta.dat >> $(dirname "$BKP_TARGET_PATH")/meta.dat
+zipopt=""
+OLDIFS=$IFS;IFS=$'\n'
+if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
+   if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
+      files=$(find . -exec cksum {} + 2>/dev/null | sed 's/ [.]\// /g' | grep -vxf <(CHECKSUMSTORE -g) | cut -d ' ' -f3-)
+      [[ -n "${files// /}" ]] || { echo "No Files To Archive"; exit 0; }
+   else
+      files=*
+   fi
+   zipopt="-r"
+else
+   if [ $(($BACKUPOPT & $INCREMENTALOPT)) = $INCREMENTALOPT ]; then
+      files=$(cksum * 2>/dev/null | grep -vxf <(CHECKSUMSTORE -g) | cut -d ' ' -f3-)
+      [[ -n "${files// /}" ]] || { echo "No Files To Archive"; exit 0; }
+   else
+      files=./*
+   fi
 fi
 set -x
-if [ $(($BACKUPOPT & $RECURSIVEOPT)) = $RECURSIVEOPT ]; then
-   zip -r "$BKP_TARGET_PATH".zip ./*  | tee "$BKP_TARGET_PATH".log
-else
-   zip "$BKP_TARGET_PATH".zip ./*  | tee "$BKP_TARGET_PATH".log
+for fil in $files; do zip $zipopt "$BKP_TARGET_PATH".zip "$fil"; done | tee "$BKP_TARGET_PATH".log
+{ set +x; } 2>/dev/null; 
+CHECKSUMSTORE -p
+IFS=$OLDIFS
+if [[ -n $SECONDARYBACKUPPATH && -n $SEC_BKP_NAME ]]; then
+   set -x
+   zip -rgj $SEC_BKP_NAME "$BKP_TARGET_PATH"*
+   { set +x; } 2>/dev/null; 
 fi
-{ set +x; } 2>/dev/null; echo "Command output directed to:"
+echo "Command output directed to:"
 echo "$BKP_TARGET_PATH".log
